@@ -22,7 +22,10 @@ create_ca() {
 
     echo '01' > serial
     touch index.txt
-    touch index.txt.attr
+    cat > index.txt.attr << EOL
+unique_subject = no
+
+EOL
 
     echo "Creating ca"
 
