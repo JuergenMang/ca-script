@@ -186,9 +186,9 @@ if [ -z "${1+x}" ]
 then
     print_usage
     exit 2
-else
-    ACTION="$1"
 fi
+
+ACTION="$1"
 
 case "$ACTION" in
     ca)
