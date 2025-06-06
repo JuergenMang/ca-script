@@ -11,11 +11,12 @@
 # Strict error handling
 set -eEu -o pipefail
 
-[ -z "${CAPATH+x}" ] && CAPATH="default-ca"
-[ -z "${CADAYS+x}" ] && CADAYS=3650
-[ -z "${KEYALG+x}" ] && KEYALG="rsa:2048"
-[ -z "${CERTDAYS+x}" ] && CERTDAYS=365
+[ -n "${CAPATH+x}" ] || CAPATH="default-ca"
+[ -n "${CADAYS+x}" ] || CADAYS=3650
+[ -n "${KEYALG+x}" ] || KEYALG="ec:prime256v1"
+[ -n "${CERTDAYS+x}" ] || CERTDAYS=365
 
+CA_NAME=$(basename "$CAPATH")
 KEY_TYPE=${KEYALG%%:*}
 KEY_SIZE=${KEYALG#*:}
 
@@ -49,7 +50,7 @@ unique_subject = no
 
 EOL
 
-    echo "Creating ca"
+    echo "Creating ca in folder $CAPATH"
 
     cat > "$CAPATH/ca/ca.cnf" << EOL
 [req]
@@ -57,8 +58,8 @@ distinguished_name = root_ca_distinguished_name
 x509_extensions = root_ca_extensions
 prompt = no
 [root_ca_distinguished_name]
-O = Self Signed CA
-CN = Self Signed CA
+O = $CA_NAME
+CN = $CA_NAME
 
 [root_ca_extensions]
 basicConstraints = CA:true
@@ -132,6 +133,16 @@ create_cert() {
         exit 1
     fi
 
+    local EXT_KEY_USAGE
+    echo "1) serverAuth"
+    echo "2) clientAuth"
+    read -r -N 1 -p "Extended Key Usage: " EXT_KEY_USAGE
+    case "$EXT_KEY_USAGE" in
+        2) EXT_KEY_USAGE="clientAuth" ;;
+        *) EXT_KEY_USAGE="serverAuth" ;;
+    esac
+    echo ""
+
     cat > "$CAPATH/certs/$CN.cnf" << EOL
 [req]
 distinguished_name = req_distinguished_name
@@ -143,7 +154,7 @@ CN = $CN
 [v3_req]
 basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyEncipherment, dataEncipherment
-extendedKeyUsage = serverAuth
+extendedKeyUsage = $EXT_KEY_USAGE
 subjectAltName = @alt_names
 [alt_names]
 EOL
