@@ -1,100 +1,157 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Author: Juergen Mang <juergen.mang@axians.de>
-# Date: 2024-07-26
-
-# Shortdesc: Simple script to create a self signed ca and create/sign certificates.
-# Desc:
-#  - Creates ca self signed certificate
-#  - Creates signed server certificates
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (c) 2025 Juergen Mang <mail@juergenmang.de>
+# https://github.com/JuergenMang/ca-script
 
 # Strict error handling
 set -eEu -o pipefail
 
-[ -n "${CAPATH+x}" ] || CAPATH="default-ca"
-[ -n "${CADAYS+x}" ] || CADAYS=3650
-[ -n "${KEYALG+x}" ] || KEYALG="ec:prime256v1"
-[ -n "${CERTDAYS+x}" ] || CERTDAYS=365
-
-CA_NAME=$(basename "$CAPATH")
-KEY_TYPE=${KEYALG%%:*}
-KEY_SIZE=${KEYALG#*:}
-
-if [ -z "$KEY_TYPE" ] || [ -z "$KEY_SIZE" ]
+if [ -s .ca-script.cnf ]
 then
-    echo "Invalid KEYALG environment"
+    . .ca-script.cnf
+fi
+
+# CA default config
+[ -n "${CA_PATH+x}" ] || CA_PATH="default-ca"
+[ -n "${CA_DAYS+x}" ] || CA_DAYS=3650
+[ -n "${CA_KEY_ALG+x}" ] || CA_KEY_ALG="ec:secp384r1"
+[ -n "${CA_KEY_ENC+x}" ] || CA_KEY_ENC="1"
+
+# Certificate default config
+[ -n "${CERT_DAYS+x}" ] || CERT_DAYS=365
+[ -n "${CERT_EXPIRE_DAYS+x}" ] || CERT_EXPIRE_DAYS=14
+[ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
+[ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
+
+CA_KEY_TYPE=${CA_KEY_ALG%%:*}
+CA_KEY_SIZE=${CA_KEY_ALG#*:}
+CERT_KEY_TYPE=${CERT_KEY_ALG%%:*}
+CERT_KEY_SIZE=${CERT_KEY_ALG#*:}
+
+if [ -z "$CA_KEY_TYPE" ] || [ -z "$CA_KEY_SIZE" ]
+then
+    echo "Invalid CA_KEY_ALG environment"
     exit 1
 fi
 
-if [ -d "$CAPATH" ]
+if [ -z "$CERT_KEY_TYPE" ] || [ -z "$CERT_KEY_SIZE" ]
 then
-    CAPATH=$(realpath "$CAPATH")
+    echo "Invalid CERT_KEY_ALG environment"
+    exit 1
+fi
+
+if [ -d "$CA_PATH" ]
+then
+    CA_PATH=$(realpath "$CA_PATH")
 fi
 
 echo "--"
-echo "CAPATH: $CAPATH"
-echo "CADAYS $CADAYS"
-echo "KEYALG: $KEYALG"
-echo "CERTDAYS: $CERTDAYS"
+echo "CA_PATH: $CA_PATH"
+echo "CA_DAYS $CA_DAYS"
+echo "CA_KEY_ALG: $CA_KEY_ALG"
+echo "CA_KEY_ENC $CA_KEY_ENC"
+echo "CERT_DAYS: $CERT_DAYS"
+echo "CERT_EXPIRE_DAYS: $CERT_EXPIRE_DAYS"
+echo "CERT_KEY_ALG: $CERT_KEY_ALG"
+echo "CERT_KEY_ENC: $CERT_KEY_ENC"
 echo "--"
 
-create_ca() {
-    mkdir -p "$CAPATH/ca"
-    mkdir -p "$CAPATH/certs"
-    CAPATH=$(realpath "$CAPATH")
+ca.create() {
+    local CA_NAME
+    read -r -p "Enter CA Name: " CA_NAME
+    if [ -z "$CA_NAME" ]
+    then
+        echo "No CA Name entered, exiting"
+        exit 1
+    fi
+    local CA_ORG
+    read -r -p "Enter CA Organization: " CA_ORG
+    if [ -z "$CA_ORG" ]
+    then
+        echo "No CA Name entered, exiting"
+        exit 1
+    fi
+    mkdir -p "$CA_PATH/ca"
+    mkdir -p "$CA_PATH/certs"
+    mkdir -p "$CA_PATH/crl"
+    CA_PATH=$(realpath "$CA_PATH")
 
-    echo '01' > "$CAPATH/ca/serial"
-    touch "$CAPATH/ca/index.txt"
-    cat > "$CAPATH/ca/index.txt.attr" << EOL
+    echo '01' > "$CA_PATH/ca/serial"
+    echo '1000' > "$CA_PATH/ca/crlnumber"
+    touch "$CA_PATH/ca/index.txt"
+    cat > "$CA_PATH/ca/index.txt.attr" << EOL
 unique_subject = no
 
 EOL
 
-    echo "Creating ca in folder $CAPATH"
+    echo "Creating ca in folder $CA_PATH"
 
-    cat > "$CAPATH/ca/ca.cnf" << EOL
+    cat > "$CA_PATH/ca/ca.cnf" << EOL
 [req]
-distinguished_name = root_ca_distinguished_name
-x509_extensions = root_ca_extensions
-prompt = no
+distinguished_name     = root_ca_distinguished_name
+x509_extensions        = root_ca_extensions
+prompt                 = no
+
 [root_ca_distinguished_name]
-O = $CA_NAME
-CN = $CA_NAME
+O                      = $CA_ORG
+CN                     = $CA_NAME
 
 [root_ca_extensions]
-basicConstraints = CA:true
+basicConstraints       = CA:true
 
 [ ca ]
-default_ca = self_signed_ca
+default_ca             = self_signed_ca
 
 [self_signed_ca]
-dir = $CAPATH/ca
-database = $CAPATH/ca/index.txt
-new_certs_dir = $CAPATH/certs/
-serial = $CAPATH/ca/serial
-copy_extensions = copy
-policy = local_ca_policy
-x509_extensions = local_ca_extensions
-default_md = sha256
+dir                    = $CA_PATH/ca
+database               = $CA_PATH/ca/index.txt
+new_certs_dir          = $CA_PATH/certs/
+certificate            = $CA_PATH/ca/ca.crt
+serial                 = $CA_PATH/ca/serial
+crlnumber              = $CA_PATH/ca/crlnumber
+private_key            = $CA_PATH/ca/ca.key
+copy_extensions        = copy
+policy                 = local_ca_policy
+x509_extensions        = local_ca_extensions
+default_md             = sha256
+default_crl_days       = 30
+crl_extensions         = crl_ext
 
 [ local_ca_policy ]
-commonName = supplied
-organizationName = supplied
+commonName             = supplied
 
 [ local_ca_extensions ]
-basicConstraints = CA:false
+basicConstraints       = CA:false
+
+[ crl_ext ]
+authorityKeyIdentifier = keyid:always
 EOL
 
-    if [ "$KEY_TYPE" = "rsa" ]
+    local OPTS=()
+    if [ "$CA_KEY_ENC" -eq 0 ]
     then
-        openssl req -new -x509 -newkey "$KEYALG" -sha256 -days "$CADAYS" -nodes \
-            -config "$CAPATH/ca/ca.cnf" -keyout "$CAPATH/ca/ca.key" \
-            -out "$CAPATH/ca/ca.pem"
-    elif [ "$KEY_TYPE" = "ec" ]
+        OPTS+=("-nodes")
+    fi
+
+    if [ "$CA_KEY_TYPE" = "rsa" ]
     then
-        openssl req -new -x509 -newkey "$KEY_TYPE" -pkeyopt "ec_paramgen_curve:$KEY_SIZE" \
-            -sha256 -days "$CADAYS" -nodes -config "$CAPATH/ca/ca.cnf" \
-            -keyout "$CAPATH/ca/ca.key" -out "$CAPATH/ca/ca.pem"
+        if ! openssl req -new -x509 -newkey "$CA_KEY_ALG" -sha256 -days "$CA_DAYS" \
+            -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+            -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
+        then
+            rm -rf "$CA_PATH"
+            return 1
+        fi
+    elif [ "$CA_KEY_TYPE" = "ec" ]
+    then
+        if ! openssl req -new -x509 -newkey "$CA_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CA_KEY_SIZE" \
+            -sha256 -days "$CA_DAYS" -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+            -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
+        then
+            rm -rf "$CA_PATH"
+            return 1
+        fi
     else
         echo "Unsupported key type"
         return 1
@@ -102,9 +159,36 @@ EOL
     return 0
 }
 
-create_cert() {
+ca.delete() {
+    read -r -N1 -p "Really delete $CA_PATH? (y|N)" ANSWER
+    echo ""
+    if [ "$ANSWER" = "y" ]
+    then
+        rm -rf "$CA_PATH"
+        return 0
+    fi
+    return 1
+}
+
+ca.index() {
+    cat "$CA_PATH/ca/index.txt"
+}
+
+ca.show() {
+    openssl x509 -in "$CA_PATH/ca/ca.crt" -noout -subject -dates -fingerprint
+}
+
+crl.create() {
+    openssl ca -config "$CA_PATH/ca/ca.cnf" -gencrl -out "$CA_PATH/crl/ca.crl"
+}
+
+crl.show() {
+     openssl crl -in "$CA_PATH/crl/ca.crl" -noout -text
+}
+
+cert.create() {
     #first get sans interactively
-    rm -f "$CAPATH/certs/alt_names.cnf"
+    rm -f "$CA_PATH/certs/alt_names.cnf"
     #dns names
     local CN=""
     local I=0
@@ -113,7 +197,7 @@ create_cert() {
         read -r -p "Enter hostname: " NAME
         [ -z "$NAME" ] && break
         I=$((I+1))
-        echo "DNS.$I = $NAME" >> "$CAPATH/certs/alt_names.cnf"
+        echo "DNS.$I = $NAME" >> "$CA_PATH/certs/alt_names.cnf"
         #first name is CN
         [ "$I" = "1" ] && CN="$NAME"
     done
@@ -124,7 +208,7 @@ create_cert() {
         read -r -p "Enter IP: " IP
         [ -z "$IP" ] && break
         I=$((I+1))
-        echo "IP.$I = $IP" >> "$CAPATH/certs/alt_names.cnf"
+        echo "IP.$I = $IP" >> "$CA_PATH/certs/alt_names.cnf"
     done
 
     if [ -z "$CN" ]
@@ -143,73 +227,216 @@ create_cert() {
     esac
     echo ""
 
-    cat > "$CAPATH/certs/$CN.cnf" << EOL
+    cat > "$CA_PATH/certs/$CN.cnf" << EOL
 [req]
 distinguished_name = req_distinguished_name
-req_extensions = v3_req
-prompt = no
+req_extensions     = v3_req
+prompt             = no
+
 [req_distinguished_name]
-O = Custom Cert
-CN = $CN
+CN                 = $CN
+
 [v3_req]
-basicConstraints = CA:FALSE
-keyUsage = digitalSignature, keyEncipherment, dataEncipherment
-extendedKeyUsage = $EXT_KEY_USAGE
-subjectAltName = @alt_names
+basicConstraints   = CA:FALSE
+keyUsage           = digitalSignature, keyEncipherment, dataEncipherment
+extendedKeyUsage   = $EXT_KEY_USAGE
+subjectAltName     = @alt_names
+
 [alt_names]
 EOL
-    cat "$CAPATH/certs/alt_names.cnf" >> "$CAPATH/certs/$CN.cnf"
-    rm -f "$CAPATH/certs/alt_names.cnf"
+    cat "$CA_PATH/certs/alt_names.cnf" >> "$CA_PATH/certs/$CN.cnf"
+    rm -f "$CA_PATH/certs/alt_names.cnf"
 
-    if [ "$KEY_TYPE" = "rsa" ]
+    local OPTS=()
+    if [ "$CERT_KEY_ENC" -eq 0 ]
     then
-        openssl req -new -sha256 -newkey "$KEYALG" -nodes -config "$CAPATH/certs/$CN.cnf" \
-            -keyout "$CAPATH/certs/$CN.key" -out "$CAPATH/certs/$CN.csr" -extensions v3_req
-    elif [ "$KEY_TYPE" = "ec" ]
+        OPTS+=("-nodes")
+    fi
+
+    if [ "$CERT_KEY_TYPE" = "rsa" ]
     then
-        openssl req -new -sha256 -newkey "$KEY_TYPE" -pkeyopt "ec_paramgen_curve:$KEY_SIZE" \
-            -nodes -config "$CAPATH/certs/$CN.cnf" -keyout "$CAPATH/certs/$CN.key" \
-            -out "$CAPATH/certs/$CN.csr" -extensions v3_req
+        openssl req -new -sha256 -newkey "$CERT_KEY_ALG" -config "$CA_PATH/certs/$CN.cnf" \
+            -keyout "$CA_PATH/certs/$CN.key" -out "$CA_PATH/certs/$CN.csr" -extensions v3_req \
+            "${OPTS[@]}"
+    elif [ "$CERT_KEY_TYPE" = "ec" ]
+    then
+        openssl req -new -sha256 -newkey "$CERT_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CERT_KEY_SIZE" \
+            -config "$CA_PATH/certs/$CN.cnf" -keyout "$CA_PATH/certs/$CN.key" \
+            -out "$CA_PATH/certs/$CN.csr" -extensions v3_req "${OPTS[@]}"
     else
         echo "Unsupported key type"
         return 1
     fi
 
     echo "Sign cert with ca"
-    openssl ca -in "$CAPATH/certs/$CN.csr" -cert "$CAPATH/ca/ca.pem" -keyfile "$CAPATH/ca/ca.key" \
-        -config "$CAPATH/ca/ca.cnf" -out "$CAPATH/certs/$CN.pem" -days "$CERTDAYS" -batch
+    openssl ca -in "$CA_PATH/certs/$CN.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
+        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$CN.crt" -days "$CERT_DAYS" -batch
 
     return 0
+}
+
+cert.revoke() {
+    if [ -z "${1+x}" ]
+    then
+        print_usage
+        return 2
+    elif [ ! -f "$CA_PATH/certs/$1.crt" ]
+    then
+        echo "Certificate for $1 not found"
+        return 1
+    fi
+    openssl ca -config "$CA_PATH/ca/ca.cnf" -revoke "$CA_PATH/certs/$1.crt"
+}
+
+cert.list() {
+    local CERT FILENAME SUBJECT SAN END
+    {
+        while read -r CERT
+        do
+            FILENAME=$(basename "$CERT" .crt)
+            SUBJECT=$(openssl x509 -in "$CERT" -noout -subject | sed 's/^subject=//')
+            SAN=$(openssl x509 -in "$CERT" -noout -ext subjectAltName | tail -1 | sed -E 's/^\s+//')
+            END=$(openssl x509 -in "$CERT" -noout -enddate | sed 's/notAfter=//')
+            printf "%s\t%s\t%s\t%s\n" "$FILENAME" "$SUBJECT" "$SAN" "$END"
+        done < <(find "$CA_PATH/certs/" -name \*.crt)
+    } | column -t -s $'\t' -N "Cert,Subject,SAN,End"
+}
+
+cert.show() {
+    if [ -z "${1+x}" ]
+    then
+        print_usage
+        return 2
+    elif [ ! -f "$CA_PATH/certs/$1.crt" ]
+    then
+        echo "Certificate for $1 not found"
+        return 1
+    fi
+    openssl x509 -in "$CA_PATH/certs/$1.crt" -noout -subject -dates -fingerprint -ext subjectAltName
+}
+
+cert.renew() {
+    if [ -z "${1+x}" ]
+    then
+        print_usage
+        return 2
+    elif [ ! -f "$CA_PATH/certs/$1.csr" ]
+    then
+        echo "Certificate signing request for $1 not found"
+        return 1
+    fi
+    echo "Renewing cert $1"
+    openssl ca -in "$CA_PATH/certs/$1.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
+        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$1.crt" -days "$CERT_DAYS" -batch
+
+    return 0
+}
+
+cert.autorenew() {
+    local EXPIRE=$((CERT_EXPIRE_DAYS*24*60*60))
+    while read -r CSR
+    do
+        local FQDN
+        FQDN=$(basename "$CSR" .csr)
+        echo -n "Checking $FQDN: "
+        if ! openssl x509 --checkend "$EXPIRE" -in "$CA_PATH/certs/$FQDN.crt"
+        then
+            renew_cert "$FQDN"
+        fi
+    done < <(find "$CA_PATH/certs" -type f -name \*.csr -printf "%f\n")
 }
 
 print_usage() {
     exec 1>&2
     echo "Creates a self signed ca and signed certificates"
-    echo "Usage: createcert.sh (ca|cert)"
+    echo "Usage:"
+    echo "    ca-script.sh ca <create|delete|show|index>"
+    echo "    ca-script.sh cert <autorenew|create|list>"
+    echo "    ca-script.sh cert <renew|revoke|show> <fqdn>"
+    echo "    ca-script.sh crl <create|show>"
+    echo ""
     echo "Environment:"
-    echo -e "\tCAPATH     CA path, default: current dir"
-    echo -e "\tCADAYS     Lifetime of the CA certificate in days, default: 3650"
-    echo -e "\tKEYALG     Alg for key: rsa:2048 (default), ec:prime256v1, ec:secp384r1"
-    echo -e "\tCERTDAYS   Lifetime of the certificate in days, default: 365"
+    echo "    CA_PATH           CA path, default: default-ca"
+    echo "    CA_DAYS           The CA certificate lifetime in days, default: 3650"
+    echo "    CA_KEY_ALG        Alg. for CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1 (default)"
+    echo "    CA_KEY_ENC        Encrypt CA private key, default: 1"
+    echo ""
+    echo "    CERT_DAYS         The certificate lifetime in days, default: 365"
+    echo "    CERT_KEY_ALG      Alg. for certificate keys: rsa:2048, rsa:4096, ec:prime256v1 (default), ec:secp384r1"
+    echo "    CERT_KEY_ENC      Encrypt certificate private keys, default: 1"
+    echo "    CERT_EXPIRE_DAYS  Remaining lifetime in days for autorenew, default 14"
 }
 
-if [ -z "${1+x}" ]
+if [ $# -lt 2 ]
 then
     print_usage
     exit 2
 fi
 
-ACTION="$1"
+CATEGORY="$1"
+ACTION="$2"
+shift 2
 
-case "$ACTION" in
+case "$CATEGORY" in
     ca)
-        create_ca
+        case "$ACTION" in
+            create)
+                ca.create
+                ;;
+            delete)
+                ca.delete
+                ;;
+            index)
+                ca.index
+                ;;
+            show)
+                ca.show
+                ;;
+            *)
+                print_usage
+                exit 2
+                ;;
+        esac
         ;;
     cert)
-        create_cert
+        case "$ACTION" in
+            autorenew)
+                cert.autorenew
+                ;;
+            create)
+                cert.create
+                ;;
+            list)
+                cert.list
+                ;;
+            renew)
+                cert.renew "$@"
+                ;;
+            revoke)
+                cert.revoke "$@"
+                ;;
+            show)
+                cert.show "$@"
+                ;;
+            *)
+                print_usage
+                exit 2
+                ;;
+        esac
         ;;
-    clean)  
-        rm -rf "$CAPATH"
+    crl)
+        case "$ACTION" in
+            create)
+                crl.create
+                ;;
+            show)
+                crl.show
+                ;;
+            *)
+                print_usage
+                exit 2
+                ;;
+        esac
         ;;
     *)
         print_usage
