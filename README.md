@@ -39,13 +39,14 @@ The script also tries to read the `.ca-script.cnf` file in the current folter to
 
 Simply use a different `CA_PATH` to manage multiple CA's with this script.
 
-## Key encryption
+## Passwords
 
 In the default config the private keys are encrypted. If you do not want to type passwords while you managing the certificates, you can set environment variables for the passwords.
 
 ```sh
 export CA_KEY_PASS="<password>"
 export CERT_KEY_PASS="<password>"
+export P12_PASS="<password>"
 ```
 
 ## Usage
@@ -59,11 +60,16 @@ export CERT_KEY_PASS="<password>"
 
 # Show the CA certificate
 ./ca-script.sh ca show
+
+# Show the CA index
+./ca-script.sh ca index
 ```
 
 You can find the CA certificate in the folder `$CA_PATH/ca/ca.crt` and import this files in the CA trust stores to trust issued certificates.
 
-### Create a Certificate
+### Managing Certificates
+
+You can find the certificate and private key in the folder `$CA_PATH/certs/<fqdn>.{crt,key}`.
 
 ```sh
 # Create a certificate with default values.
@@ -75,21 +81,12 @@ You can find the CA certificate in the folder `$CA_PATH/ca/ca.crt` and import th
 
 # Renew the certificate
 ./ca-script.sh cert renew <fqdn>
-```
 
-You can find the certificate and private key in the folder `$CA_PATH/certs/<fqdn>.{crt,key}`.
-
-### Manage Certificates
-
-```sh
 # Show all certificates issued by the CA
 ./ca-script.sh cert list
 
 # Renew all certificates that expire within two weeks
 ./ca-script.sh cert autorenew
-
-# Revoke a certificate
-./ca-script.sh cert revoke <fqdn>
 ```
 
 ### Certificate Revocation List
@@ -97,9 +94,20 @@ You can find the certificate and private key in the folder `$CA_PATH/certs/<fqdn
 The CRL can be found in `$CA_PATH/crl/ca.crl`.
 
 ```sh
+# Revoke a certificate
+./ca-script.sh cert revoke <fqdn>
+
 # Create the CRL
 ./ca-script.sh crl create
 
 # Show the CRL
 ./ca-script.sh crl show
+```
+
+### Export certificate
+
+You can create a PKCS12 file.
+
+```sh
+./ca-script.sh p12 create <fqdn> <output file>
 ```

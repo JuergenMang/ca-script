@@ -380,6 +380,34 @@ cert.autorenew() {
     done < <(find "$CA_PATH/certs" -type f -name \*.csr -printf "%f\n")
 }
 
+p12.create() {
+    if [ $# -ne 2 ]
+    then
+        print_usage
+        return 2
+    elif [ ! -f "$CA_PATH/certs/$1.crt" ]
+    then
+        echo "Certificate for $1 not found"
+        return 1
+    fi
+    local OPTS=()
+    if [ "$CERT_KEY_ENC" -eq 1 ] && [ -n "${CERT_KEY_PASS+x}" ]
+    then
+        OPTS+=("-passin" "env:CERT_KEY_PASS")
+    fi
+    if [ -n "${P12_PASS+x}" ]
+    then
+        OPTS+=("-passout" "env:P12_PASS")
+    fi
+    if ! openssl pkcs12 -export -out "$2" -in "$CA_PATH/certs/$1.crt" "-inkey" "$CA_PATH/certs/$1.key" \
+            -certfile "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
+    then
+        return 1
+    fi
+
+    return 0
+}
+
 print_usage() {
     exec 1>&2
     echo "Creates a self signed ca and signed certificates"
@@ -388,6 +416,7 @@ print_usage() {
     echo "    ca-script.sh cert <autorenew|create|list>"
     echo "    ca-script.sh cert <renew|revoke|show> <fqdn>"
     echo "    ca-script.sh crl <create|show>"
+    echo "    ca-script.sh p12 create <fqdn> <output file>"
     echo ""
     echo "Environment:"
     echo "    CA_PATH           CA path, default: default-ca"
@@ -465,6 +494,17 @@ case "$CATEGORY" in
                 ;;
             show)
                 crl.show
+                ;;
+            *)
+                print_usage
+                exit 2
+                ;;
+        esac
+        ;;
+    p12)
+        case "$ACTION" in
+            create)
+                p12.create "$@"
                 ;;
             *)
                 print_usage
