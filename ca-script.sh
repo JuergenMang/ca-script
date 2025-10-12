@@ -9,6 +9,7 @@ set -eEu -o pipefail
 
 if [ -s .ca-script.cnf ]
 then
+    # shellcheck disable=SC1091
     . .ca-script.cnf
 fi
 
