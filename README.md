@@ -20,6 +20,21 @@ export CERT_KEY_ENC="1"              # Set to 0 to not encrypt certificate priva
 
 The script also tries to read the `.ca-script.cnf` file in the current folter to get defaults.
 
+```sh
+# Example .ca-script.cnf that uses defaults
+# CA default config
+[ -n "${CA_PATH+x}" ] || CA_PATH="default-ca"
+[ -n "${CA_DAYS+x}" ] || CA_DAYS=3650
+[ -n "${CA_KEY_ALG+x}" ] || CA_KEY_ALG="ec:secp384r1"
+[ -n "${CA_KEY_ENC+x}" ] || CA_KEY_ENC="1"
+
+# Certificate default config
+[ -n "${CERT_DAYS+x}" ] || CERT_DAYS=365
+[ -n "${CERT_EXPIRE_DAYS+x}" ] || CERT_EXPIRE_DAYS=14
+[ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
+[ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
+```
+
 You can use a different `CA_PATH` to manage multiple CA's.
 
 ## Usage
