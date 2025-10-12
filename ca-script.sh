@@ -7,6 +7,10 @@
 # Strict error handling
 set -eEu -o pipefail
 
+# Keep created files private
+umask 0077
+
+# Get configuration
 if [ -s .ca-script.cnf ]
 then
     # shellcheck disable=SC1091
@@ -57,6 +61,9 @@ echo "CERT_EXPIRE_DAYS: $CERT_EXPIRE_DAYS"
 echo "CERT_KEY_ALG: $CERT_KEY_ALG"
 echo "CERT_KEY_ENC: $CERT_KEY_ENC"
 echo "--"
+
+###############################################################################
+# Functions
 
 ca.create() {
     local CA_NAME
@@ -192,7 +199,8 @@ crl.show() {
 
 cert.create() {
     #first get sans interactively
-    rm -f "$CA_PATH/certs/alt_names.cnf"
+    local ALT_NAMES
+    ALT_NAMES=$(mktemp)
     #dns names
     local CN=""
     local I=0
@@ -201,7 +209,7 @@ cert.create() {
         read -r -p "Enter hostname: " NAME
         [ -z "$NAME" ] && break
         I=$((I+1))
-        echo "DNS.$I = $NAME" >> "$CA_PATH/certs/alt_names.cnf"
+        echo "DNS.$I = $NAME" >> "$ALT_NAMES"
         #first name is CN
         [ "$I" = "1" ] && CN="$NAME"
     done
@@ -212,13 +220,13 @@ cert.create() {
         read -r -p "Enter IP: " IP
         [ -z "$IP" ] && break
         I=$((I+1))
-        echo "IP.$I = $IP" >> "$CA_PATH/certs/alt_names.cnf"
+        echo "IP.$I = $IP" >> "$ALT_NAMES"
     done
 
     if [ -z "$CN" ]
     then
         echo "Minimum one name is required"
-        exit 1
+        return 1
     fi
 
     local EXT_KEY_USAGE
@@ -248,8 +256,8 @@ subjectAltName     = @alt_names
 
 [alt_names]
 EOL
-    cat "$CA_PATH/certs/alt_names.cnf" >> "$CA_PATH/certs/$CN.cnf"
-    rm -f "$CA_PATH/certs/alt_names.cnf"
+    cat "$ALT_NAMES" >> "$CA_PATH/certs/$CN.cnf"
+    rm -f "$ALT_NAMES"
 
     local OPTS=()
     if [ "$CERT_KEY_ENC" -eq 0 ]
@@ -292,7 +300,6 @@ EOL
     then
         return 1
     fi
-
     return 0
 }
 
@@ -311,7 +318,11 @@ cert.revoke() {
     then
         OPTS+=("-passin" "env:CA_KEY_PASS")
     fi
-    openssl ca -config "$CA_PATH/ca/ca.cnf" -revoke "$CA_PATH/certs/$1.crt" "${OPTS[@]}"
+    if ! openssl ca -config "$CA_PATH/ca/ca.cnf" -revoke "$CA_PATH/certs/$1.crt" "${OPTS[@]}"
+    then
+        return 1
+    fi
+    return 0
 }
 
 cert.list() {
@@ -362,7 +373,6 @@ cert.renew() {
     then
         return 1
     fi
-
     return 0
 }
 
@@ -399,12 +409,11 @@ p12.create() {
     then
         OPTS+=("-passout" "env:P12_PASS")
     fi
-    if ! openssl pkcs12 -export -out "$2" -in "$CA_PATH/certs/$1.crt" "-inkey" "$CA_PATH/certs/$1.key" \
+    if ! openssl pkcs12 -export -out "$2" -in "$CA_PATH/certs/$1.crt" -inkey "$CA_PATH/certs/$1.key" \
             -certfile "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
     then
         return 1
     fi
-
     return 0
 }
 
@@ -429,6 +438,9 @@ print_usage() {
     echo "    CERT_KEY_ENC      Encrypt certificate private keys, default: 1"
     echo "    CERT_EXPIRE_DAYS  Remaining lifetime in days for autorenew, default 14"
 }
+
+###############################################################################
+# Main
 
 if [ $# -lt 2 ]
 then
@@ -517,5 +529,3 @@ case "$CATEGORY" in
         exit 2
         ;;
 esac
-
-exit 0
