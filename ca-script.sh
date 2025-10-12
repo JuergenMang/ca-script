@@ -133,6 +133,9 @@ EOL
     if [ "$CA_KEY_ENC" -eq 0 ]
     then
         OPTS+=("-nodes")
+    elif [ -n "${CA_KEY_PASS+x}" ]
+    then
+        OPENSSL_OPTS+=("-passout" "env:CA_KEY_PASS")
     fi
 
     if [ "$CA_KEY_TYPE" = "rsa" ]
@@ -252,6 +255,9 @@ EOL
     if [ "$CERT_KEY_ENC" -eq 0 ]
     then
         OPTS+=("-nodes")
+    elif [ -n "${CERT_KEY_PASS+x}" ]
+    then
+        OPTS+=("-passout" "env:CERT_KEY_PASS")
     fi
 
     if [ "$CERT_KEY_TYPE" = "rsa" ]
@@ -275,9 +281,14 @@ EOL
         return 1
     fi
 
+    OPTS=()
+    if [ "$CA_KEY_ENC" -eq 1 ] && [ -n "${CA_KEY_PASS+x}" ]
+    then
+        OPTS+=("-passin" "env:CA_KEY_PASS")
+    fi
     echo "Sign cert with ca"
     if ! openssl ca -in "$CA_PATH/certs/$CN.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
-        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$CN.crt" -days "$CERT_DAYS" -batch
+        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$CN.crt" -days "$CERT_DAYS" -batch "${OPTS[@]}"
     then
         return 1
     fi
@@ -295,7 +306,12 @@ cert.revoke() {
         echo "Certificate for $1 not found"
         return 1
     fi
-    openssl ca -config "$CA_PATH/ca/ca.cnf" -revoke "$CA_PATH/certs/$1.crt"
+    OPTS=()
+    if [ "$CA_KEY_ENC" -eq 1 ] && [ -n "${CA_KEY_PASS+x}" ]
+    then
+        OPTS+=("-passin" "env:CA_KEY_PASS")
+    fi
+    openssl ca -config "$CA_PATH/ca/ca.cnf" -revoke "$CA_PATH/certs/$1.crt" "${OPTS[@]}"
 }
 
 cert.list() {
@@ -335,9 +351,14 @@ cert.renew() {
         echo "Certificate signing request for $1 not found"
         return 1
     fi
+    local OPTS=()
+    if [ "$CA_KEY_ENC" -eq 1 ] && [ -n "${CA_KEY_PASS+x}" ]
+    then
+        OPTS+=("-passin" "env:CA_KEY_PASS")
+    fi
     echo "Renewing cert $1"
     if ! openssl ca -in "$CA_PATH/certs/$1.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
-        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$1.crt" -days "$CERT_DAYS" -batch
+        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$1.crt" -days "$CERT_DAYS" -batch "${OPTS[@]}"
     then
         return 1
     fi

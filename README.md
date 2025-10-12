@@ -35,7 +35,18 @@ The script also tries to read the `.ca-script.cnf` file in the current folter to
 [ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
 ```
 
-You can use a different `CA_PATH` to manage multiple CA's.
+## Multiple CA's
+
+Simply use a different `CA_PATH` to manage multiple CA's with this script.
+
+## Key encryption
+
+In the default config the private keys are encrypted. If you do not want to type passwords while you managing the certificates, you can set environment variables for the passwords.
+
+```sh
+export CA_KEY_PASS="<password>"
+export CERT_KEY_PASS="<password>"
+```
 
 ## Usage
 
