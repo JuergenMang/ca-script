@@ -255,22 +255,31 @@ EOL
 
     if [ "$CERT_KEY_TYPE" = "rsa" ]
     then
-        openssl req -new -sha256 -newkey "$CERT_KEY_ALG" -config "$CA_PATH/certs/$CN.cnf" \
+        if ! openssl req -new -sha256 -newkey "$CERT_KEY_ALG" -config "$CA_PATH/certs/$CN.cnf" \
             -keyout "$CA_PATH/certs/$CN.key" -out "$CA_PATH/certs/$CN.csr" -extensions v3_req \
             "${OPTS[@]}"
+        then
+            return 1
+        fi
     elif [ "$CERT_KEY_TYPE" = "ec" ]
     then
-        openssl req -new -sha256 -newkey "$CERT_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CERT_KEY_SIZE" \
+        if ! openssl req -new -sha256 -newkey "$CERT_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CERT_KEY_SIZE" \
             -config "$CA_PATH/certs/$CN.cnf" -keyout "$CA_PATH/certs/$CN.key" \
             -out "$CA_PATH/certs/$CN.csr" -extensions v3_req "${OPTS[@]}"
+        then
+            return 1
+        fi
     else
         echo "Unsupported key type"
         return 1
     fi
 
     echo "Sign cert with ca"
-    openssl ca -in "$CA_PATH/certs/$CN.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
+    if ! openssl ca -in "$CA_PATH/certs/$CN.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
         -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$CN.crt" -days "$CERT_DAYS" -batch
+    then
+        return 1
+    fi
 
     return 0
 }
@@ -326,8 +335,11 @@ cert.renew() {
         return 1
     fi
     echo "Renewing cert $1"
-    openssl ca -in "$CA_PATH/certs/$1.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
+    if ! openssl ca -in "$CA_PATH/certs/$1.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
         -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$1.crt" -days "$CERT_DAYS" -batch
+    then
+        return 1
+    fi
 
     return 0
 }
