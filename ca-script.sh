@@ -385,7 +385,7 @@ cert.autorenew() {
         echo -n "Checking $FQDN: "
         if ! openssl x509 --checkend "$EXPIRE" -in "$CA_PATH/certs/$FQDN.crt"
         then
-            renew_cert "$FQDN"
+            cert.renew "$FQDN"
         fi
     done < <(find "$CA_PATH/certs" -type f -name \*.csr -printf "%f\n")
 }
