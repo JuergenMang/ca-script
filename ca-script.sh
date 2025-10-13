@@ -373,6 +373,11 @@ cert.renew() {
     then
         return 1
     fi
+    if [ -x "$CA_PATH/hooks/$1.sh" ]
+    then
+        echo "Executing post renew script"
+        eval "$CA_PATH/hooks/$1.sh" || true
+    fi
     return 0
 }
 

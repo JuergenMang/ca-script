@@ -89,6 +89,10 @@ You can find the certificate and private key in the folder `$CA_PATH/certs/<fqdn
 ./ca-script.sh cert autorenew
 ```
 
+#### Post Renew Hook
+
+You can run a script after each successful certificate renewal, just name it `$CA_PATH/hooks/<fqdn>.sh` and make the file executable.
+
 ### Certificate Revocation List
 
 The CRL can be found in `$CA_PATH/crl/ca.crl`.
