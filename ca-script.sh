@@ -499,7 +499,7 @@ p12.create() {
 
 print_usage() {
     exec 1>&2
-    echo "Creates a Self Signed Root CA, Intermediate CA's and creates/signes server and client certificates."
+    echo "Creates a Self Signed Root CA, Intermediate CA's and creates/signs server and client certificates."
     echo "Usage:"
     echo "    ca-script.sh ca <create|delete|show|index>"
     echo "    ca-script.sh ca sign <in csr> <out crt>"
