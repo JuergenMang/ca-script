@@ -217,7 +217,7 @@ ca.sign() {
     fi
     local IN=$1
     local OUT=$2
-    echo "Signing intermediate ca certificate with root ca certificate"
+    echo "Signing intermediate ca certificate request with root ca certificate"
     OPTS=()
     if [ "$CA_KEY_ENC" -eq 1 ] && [ -n "${CA_KEY_PASS+x}" ]
     then
