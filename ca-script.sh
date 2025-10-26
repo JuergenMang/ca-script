@@ -234,7 +234,7 @@ ca.sign() {
 ca.delete() {
     read -r -N1 -p "Really delete $CA_PATH? (y|N)" ANSWER
     echo ""
-    if [ "$ANSWER" = "y" ]
+    if [ "$ANSWER" = "y" ] || [ "$ANSWER" = "Y" ]
     then
         rm -rf "$CA_PATH"
         return 0
