@@ -17,6 +17,10 @@ then
     . .ca-script.cnf
 fi
 
+# Root CA default config
+[ -n "${CA_ROOT_PATH+x}" ] || CA_ROOT_PATH="default-root-ca"
+[ -n "${CA_ROOT_DAYS+x}" ] || CA_ROOT_DAYS=7300
+
 # CA default config
 [ -n "${CA_PATH+x}" ] || CA_PATH="default-ca"
 [ -n "${CA_DAYS+x}" ] || CA_DAYS=3650
@@ -55,7 +59,7 @@ echo "--"
 echo "CA_PATH: $CA_PATH"
 echo "CA_DAYS $CA_DAYS"
 echo "CA_KEY_ALG: $CA_KEY_ALG"
-echo "CA_KEY_ENC $CA_KEY_ENC"
+echo "CA_KEY_ENC: $CA_KEY_ENC"
 echo "CERT_DAYS: $CERT_DAYS"
 echo "CERT_EXPIRE_DAYS: $CERT_EXPIRE_DAYS"
 echo "CERT_KEY_ALG: $CERT_KEY_ALG"
@@ -66,6 +70,16 @@ echo "--"
 # Functions
 
 ca.create() {
+    local SELF_SIGNED
+    local DAYS=$CA_DAYS
+    read -r -p "Self signed (Y/n): " SELF_SIGNED
+    if [ -z "$SELF_SIGNED" ] || [ "$SELF_SIGNED" = "y" ] || [ "$SELF_SIGNED" = "Y" ]
+    then
+        DAYS=$CA_ROOT_DAYS
+        SELF_SIGNED=1
+    else
+        SELF_SIGNED=0
+    fi
     local CA_NAME
     read -r -p "Enter CA Name: " CA_NAME
     if [ -z "$CA_NAME" ]
@@ -82,6 +96,7 @@ ca.create() {
     fi
     mkdir -p "$CA_PATH/ca"
     mkdir -p "$CA_PATH/certs"
+    mkdir -p "$CA_PATH/certs/archive"
     mkdir -p "$CA_PATH/crl"
     CA_PATH=$(realpath "$CA_PATH")
 
@@ -94,34 +109,20 @@ unique_subject = no
 EOL
 
     echo "Creating ca in folder $CA_PATH"
-
     cat > "$CA_PATH/ca/ca.cnf" << EOL
-[req]
-distinguished_name     = root_ca_distinguished_name
-x509_extensions        = root_ca_extensions
-prompt                 = no
-
-[root_ca_distinguished_name]
-O                      = $CA_ORG
-CN                     = $CA_NAME
-
-[root_ca_extensions]
-basicConstraints       = CA:true
-
 [ ca ]
 default_ca             = self_signed_ca
 
-[self_signed_ca]
+[ self_signed_ca ]
 dir                    = $CA_PATH/ca
 database               = $CA_PATH/ca/index.txt
-new_certs_dir          = $CA_PATH/certs/
+new_certs_dir          = $CA_PATH/certs/archive
 certificate            = $CA_PATH/ca/ca.crt
 serial                 = $CA_PATH/ca/serial
 crlnumber              = $CA_PATH/ca/crlnumber
 private_key            = $CA_PATH/ca/ca.key
 copy_extensions        = copy
 policy                 = local_ca_policy
-x509_extensions        = local_ca_extensions
 default_md             = sha256
 default_crl_days       = 30
 crl_extensions         = crl_ext
@@ -129,11 +130,29 @@ crl_extensions         = crl_ext
 [ local_ca_policy ]
 commonName             = supplied
 
-[ local_ca_extensions ]
-basicConstraints       = CA:false
+[ req ]
+distinguished_name     = req_distinguished_name
+x509_extensions        = root_ca_extensions
+prompt                 = no
+
+[ req_distinguished_name ]
+O                      = $CA_ORG
+CN                     = $CA_NAME
+
+[ root_ca_extensions ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical, CA:true
+keyUsage               = critical, keyCertSign, cRLSign  
 
 [ crl_ext ]
 authorityKeyIdentifier = keyid:always
+
+[ intermediate_ca_ext ]
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints       = critical, CA:true, pathlen:0
+keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 EOL
 
     local OPTS=()
@@ -142,12 +161,17 @@ EOL
         OPTS+=("-nodes")
     elif [ -n "${CA_KEY_PASS+x}" ]
     then
-        OPENSSL_OPTS+=("-passout" "env:CA_KEY_PASS")
+        OPTS+=("-passout" "env:CA_KEY_PASS")
+    fi
+
+    if [ "$SELF_SIGNED" -eq 1 ]
+    then
+        OPTS+=("-x509")
     fi
 
     if [ "$CA_KEY_TYPE" = "rsa" ]
     then
-        if ! openssl req -new -x509 -newkey "$CA_KEY_ALG" -sha256 -days "$CA_DAYS" \
+        if ! openssl req -new -newkey "$CA_KEY_ALG" -sha256 -days "$CA_DAYS" \
             -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
             -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
@@ -156,8 +180,8 @@ EOL
         fi
     elif [ "$CA_KEY_TYPE" = "ec" ]
     then
-        if ! openssl req -new -x509 -newkey "$CA_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CA_KEY_SIZE" \
-            -sha256 -days "$CA_DAYS" -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+        if ! openssl req -new -newkey "$CA_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CA_KEY_SIZE" \
+            -sha256 -days "$DAYS" -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
             -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
             rm -rf "$CA_PATH"
@@ -167,7 +191,43 @@ EOL
         echo "Unsupported key type"
         return 1
     fi
+
+    if [ "$SELF_SIGNED" -eq 0 ]
+    then
+        if [ -d "$CA_ROOT_PATH" ]
+        then
+            if ! ca.sign "$CA_PATH/ca/ca.csr" "$CA_PATH/ca/ca.crt"
+            then
+                return 1
+            fi
+        else
+            echo "Root CA not found"
+            return 1
+        fi
+    fi
     return 0
+}
+
+ca.sign() {
+    if [ $# -ne 2 ]
+    then
+        print_usage
+        return 2
+    fi
+    local IN=$1
+    local OUT=$2
+    echo "Signing intermediate ca certificate with root ca certificate"
+    OPTS=()
+    if [ "$CA_KEY_ENC" -eq 1 ] && [ -n "${CA_KEY_PASS+x}" ]
+    then
+        OPTS+=("-passin" "env:CA_KEY_PASS")
+    fi
+    if ! openssl ca -in "$IN" -cert "$CA_ROOT_PATH/ca/ca.crt" -keyfile "$CA_ROOT_PATH/ca/ca.key" \
+        -config "$CA_ROOT_PATH/ca/ca.cnf" -out "$OUT" -days "$CA_DAYS" -batch \
+        -extensions intermediate_ca_ext "${OPTS[@]}"
+    then
+        return 1
+    fi
 }
 
 ca.delete() {
@@ -250,7 +310,7 @@ CN                 = $CN
 
 [v3_req]
 basicConstraints   = CA:FALSE
-keyUsage           = digitalSignature, keyEncipherment, dataEncipherment
+keyUsage           = critical, digitalSignature, keyEncipherment, dataEncipherment
 extendedKeyUsage   = $EXT_KEY_USAGE
 subjectAltName     = @alt_names
 
@@ -289,14 +349,29 @@ EOL
         return 1
     fi
 
+    if ! cert.sign "$CA_PATH/certs/$CN.csr" "$CA_PATH/certs/$CN.crt"
+    then
+        return 1
+    fi
+    return 0
+}
+
+cert.sign() {
+    if [ $# -ne 2 ]
+    then
+        print_usage
+        return 2
+    fi
+    local IN=$1
+    local OUT=$2
+    echo "Sign cert with ca"
     OPTS=()
     if [ "$CA_KEY_ENC" -eq 1 ] && [ -n "${CA_KEY_PASS+x}" ]
     then
         OPTS+=("-passin" "env:CA_KEY_PASS")
     fi
-    echo "Sign cert with ca"
-    if ! openssl ca -in "$CA_PATH/certs/$CN.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
-        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$CN.crt" -days "$CERT_DAYS" -batch "${OPTS[@]}"
+    if ! openssl ca -in "$IN" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
+        -config "$CA_PATH/ca/ca.cnf" -out "$OUT" -days "$CERT_DAYS" -batch "${OPTS[@]}"
     then
         return 1
     fi
@@ -424,15 +499,20 @@ p12.create() {
 
 print_usage() {
     exec 1>&2
-    echo "Creates a self signed ca and signed certificates"
+    echo "Creates a Self Signed Root CA, Intermediate CA's and creates/signes server and client certificates."
     echo "Usage:"
     echo "    ca-script.sh ca <create|delete|show|index>"
+    echo "    ca-script.sh ca sign <in csr> <out crt>"
     echo "    ca-script.sh cert <autorenew|create|list>"
     echo "    ca-script.sh cert <renew|revoke|show> <fqdn>"
+    echo "    ca-script.sh cert sign <in csr> <out crt>"
     echo "    ca-script.sh crl <create|show>"
     echo "    ca-script.sh p12 create <fqdn> <output file>"
     echo ""
     echo "Environment:"
+    echo "    CA_ROOT_PATH      Root CA path, default: default-ca"
+    echo "    CA_ROOT_DAYS      The Root CA certificate lifetime in days, default: 7300"
+    echo ""
     echo "    CA_PATH           CA path, default: default-ca"
     echo "    CA_DAYS           The CA certificate lifetime in days, default: 3650"
     echo "    CA_KEY_ALG        Alg. for CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1 (default)"
@@ -472,6 +552,9 @@ case "$CATEGORY" in
             show)
                 ca.show
                 ;;
+            sign)
+                ca.sign "$@"
+                ;;
             *)
                 print_usage
                 exit 2
@@ -497,6 +580,9 @@ case "$CATEGORY" in
                 ;;
             show)
                 cert.show "$@"
+                ;;
+            sign)
+                cert.sign "$@"
                 ;;
             *)
                 print_usage

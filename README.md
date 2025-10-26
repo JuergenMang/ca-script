@@ -1,11 +1,15 @@
 # CA-Script
 
-This is a simple script to create a self signed CA and create/sign certificates. It uses the OpenSSL command line tool.
+This is a simple script to create a Self Signed Root CA, Intermediate CA's and create/sign server and client certificates. It uses the OpenSSL command line tool.
 
 You can use following environment variables to set some defaults:
 
 ```sh
-#CA settings
+# Root CA settings
+export CA_ROOT_PATH="default-root-ca"  # Root CA path
+export CA_ROOT_DAYS=7300               # The Root CA certificate lifetime in days
+
+# CA settings
 export CA_PATH="default-ca"          # CA path
 export CA_DAYS="3650"                # The CA certificate lifetime in days
 export CA_KEY_ALG="ec:secp384r1"     # Alg for the CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1
@@ -22,6 +26,10 @@ The script also tries to read the `.ca-script.cnf` file in the current folter to
 
 ```sh
 # Example .ca-script.cnf that uses defaults
+# Root CA default config
+[ -n "${CA_ROOT_PATH+x}" ] || CA_ROOT_PATH="default-root-ca"
+[ -n "${CA_ROOT_DAYS+x}" ] || CA_ROOT_DAYS=7300
+
 # CA default config
 [ -n "${CA_PATH+x}" ] || CA_PATH="default-ca"
 [ -n "${CA_DAYS+x}" ] || CA_DAYS=3650
@@ -34,6 +42,30 @@ The script also tries to read the `.ca-script.cnf` file in the current folter to
 [ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
 [ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
 ```
+
+## Root and intermediate certificates
+
+You can create a Root CA certificate and multiple intermediate or signing certificates.
+
+### To create the default initial Root CA certificate
+
+The script creates a self signed certificate.
+
+```sh
+CA_PATH=default-root-ca ./ca-script.sh ca create
+```
+
+- Select "Self signed: y"
+
+### To create the default intermediate CA certificate
+
+The script uses the CA defined by `CA_ROOT_PATH` to sign the intermediate certificate.
+
+```sh
+./ca-script.sh ca create
+```
+
+- Select "Self signed: n"
 
 ## Multiple CA's
 
