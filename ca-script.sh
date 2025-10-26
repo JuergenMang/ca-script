@@ -166,12 +166,12 @@ EOL
 
     if [ "$SELF_SIGNED" -eq 1 ]
     then
-        OPTS+=("-x509")
+        OPTS+=("-x509" "-days" "$CA_DAYS")
     fi
 
     if [ "$CA_KEY_TYPE" = "rsa" ]
     then
-        if ! openssl req -new -newkey "$CA_KEY_ALG" -sha256 -days "$CA_DAYS" \
+        if ! openssl req -new -newkey "$CA_KEY_ALG" -sha256 \
             -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
             -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
@@ -181,7 +181,7 @@ EOL
     elif [ "$CA_KEY_TYPE" = "ec" ]
     then
         if ! openssl req -new -newkey "$CA_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CA_KEY_SIZE" \
-            -sha256 -days "$DAYS" -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+            -sha256 -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
             -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
             rm -rf "$CA_PATH"
@@ -194,6 +194,7 @@ EOL
 
     if [ "$SELF_SIGNED" -eq 0 ]
     then
+        mv "$CA_PATH/ca/ca.crt" "$CA_PATH/ca/ca.csr"
         if [ -d "$CA_ROOT_PATH" ]
         then
             if ! ca.sign "$CA_PATH/ca/ca.csr" "$CA_PATH/ca/ca.crt"
