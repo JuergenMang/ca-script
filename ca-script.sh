@@ -111,9 +111,9 @@ EOL
     echo "Creating ca in folder $CA_PATH"
     cat > "$CA_PATH/ca/ca.cnf" << EOL
 [ ca ]
-default_ca             = self_signed_ca
+default_ca             = ca_default
 
-[ self_signed_ca ]
+[ ca_default ]
 dir                    = $CA_PATH/ca
 database               = $CA_PATH/ca/index.txt
 new_certs_dir          = $CA_PATH/certs/archive
@@ -129,6 +129,7 @@ crl_extensions         = crl_ext
 
 [ local_ca_policy ]
 commonName             = supplied
+organizationName       = optional
 
 [ req ]
 distinguished_name     = req_distinguished_name
@@ -143,7 +144,7 @@ CN                     = $CA_NAME
 subjectKeyIdentifier   = hash
 authorityKeyIdentifier = keyid:always,issuer
 basicConstraints       = critical, CA:true
-keyUsage               = critical, keyCertSign, cRLSign  
+keyUsage               = critical, keyCertSign, cRLSign
 
 [ crl_ext ]
 authorityKeyIdentifier = keyid:always
