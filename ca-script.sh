@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # SPDX-License-Identifier: GPL-3.0-or-later
-# (c) 2025 Juergen Mang <mail@juergenmang.de>
+# (c) 2025-2026 Juergen Mang <mail@juergenmang.de>
 # https://github.com/JuergenMang/ca-script
 
 # Strict error handling
@@ -28,7 +28,7 @@ fi
 [ -n "${CA_KEY_ENC+x}" ] || CA_KEY_ENC="1"
 
 # Certificate default config
-[ -n "${CERT_DAYS+x}" ] || CERT_DAYS=365
+[ -n "${CERT_DAYS+x}" ] || CERT_DAYS=90
 [ -n "${CERT_EXPIRE_DAYS+x}" ] || CERT_EXPIRE_DAYS=14
 [ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
 [ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
@@ -91,7 +91,7 @@ ca.create() {
     read -r -p "Enter CA Organization: " CA_ORG
     if [ -z "$CA_ORG" ]
     then
-        echo "No CA Name entered, exiting"
+        echo "No CA Organization entered, exiting"
         exit 1
     fi
     mkdir -p "$CA_PATH/ca"
@@ -170,11 +170,11 @@ EOL
         OPTS+=("-x509" "-days" "$CA_DAYS")
     fi
 
-    if [ "$CA_KEY_TYPE" = "rsa" ]
+    if [ "$CA_KEY_TYPE" = "rsa" ] || [ "${CA_KEY_TYPE:0:6}" = "ml-dsa" ]
     then
         if ! openssl req -new -newkey "$CA_KEY_ALG" -sha256 \
-            -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
-            -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
+                -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+                -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
             rm -rf "$CA_PATH"
             return 1
@@ -182,8 +182,8 @@ EOL
     elif [ "$CA_KEY_TYPE" = "ec" ]
     then
         if ! openssl req -new -newkey "$CA_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CA_KEY_SIZE" \
-            -sha256 -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
-            -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
+                -sha256 -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+                -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
             rm -rf "$CA_PATH"
             return 1
@@ -225,8 +225,8 @@ ca.sign() {
         OPTS+=("-passin" "env:CA_KEY_PASS")
     fi
     if ! openssl ca -in "$IN" -cert "$CA_ROOT_PATH/ca/ca.crt" -keyfile "$CA_ROOT_PATH/ca/ca.key" \
-        -config "$CA_ROOT_PATH/ca/ca.cnf" -out "$OUT" -days "$CA_DAYS" -batch \
-        -extensions intermediate_ca_ext "${OPTS[@]}"
+            -config "$CA_ROOT_PATH/ca/ca.cnf" -out "$OUT" -days "$CA_DAYS" -batch \
+            -extensions intermediate_ca_ext "${OPTS[@]}"
     then
         return 1
     fi
@@ -329,20 +329,19 @@ EOL
     then
         OPTS+=("-passout" "env:CERT_KEY_PASS")
     fi
-
-    if [ "$CERT_KEY_TYPE" = "rsa" ]
+    if [ "$CERT_KEY_TYPE" = "rsa" ] || [ "${CERT_KEY_TYPE:0:6}" = "ml-dsa" ]
     then
         if ! openssl req -new -sha256 -newkey "$CERT_KEY_ALG" -config "$CA_PATH/certs/$CN.cnf" \
-            -keyout "$CA_PATH/certs/$CN.key" -out "$CA_PATH/certs/$CN.csr" -extensions v3_req \
-            "${OPTS[@]}"
+                -keyout "$CA_PATH/certs/$CN.key" -out "$CA_PATH/certs/$CN.csr" -extensions v3_req \
+                "${OPTS[@]}"
         then
             return 1
         fi
     elif [ "$CERT_KEY_TYPE" = "ec" ]
     then
         if ! openssl req -new -sha256 -newkey "$CERT_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CERT_KEY_SIZE" \
-            -config "$CA_PATH/certs/$CN.cnf" -keyout "$CA_PATH/certs/$CN.key" \
-            -out "$CA_PATH/certs/$CN.csr" -extensions v3_req "${OPTS[@]}"
+                -config "$CA_PATH/certs/$CN.cnf" -keyout "$CA_PATH/certs/$CN.key" \
+                -out "$CA_PATH/certs/$CN.csr" -extensions v3_req "${OPTS[@]}"
         then
             return 1
         fi
@@ -373,7 +372,7 @@ cert.sign() {
         OPTS+=("-passin" "env:CA_KEY_PASS")
     fi
     if ! openssl ca -in "$IN" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
-        -config "$CA_PATH/ca/ca.cnf" -out "$OUT" -days "$CERT_DAYS" -batch "${OPTS[@]}"
+            -config "$CA_PATH/ca/ca.cnf" -out "$OUT" -days "$CERT_DAYS" -batch "${OPTS[@]}"
     then
         return 1
     fi
@@ -446,7 +445,7 @@ cert.renew() {
     fi
     echo "Renewing cert $1"
     if ! openssl ca -in "$CA_PATH/certs/$1.csr" -cert "$CA_PATH/ca/ca.crt" -keyfile "$CA_PATH/ca/ca.key" \
-        -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$1.crt" -days "$CERT_DAYS" -batch "${OPTS[@]}"
+            -config "$CA_PATH/ca/ca.cnf" -out "$CA_PATH/certs/$1.crt" -days "$CERT_DAYS" -batch "${OPTS[@]}"
     then
         return 1
     fi

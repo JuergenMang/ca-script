@@ -12,17 +12,17 @@ export CA_ROOT_DAYS=7300               # The Root CA certificate lifetime in day
 # CA settings
 export CA_PATH="default-ca"          # CA path
 export CA_DAYS="3650"                # The CA certificate lifetime in days
-export CA_KEY_ALG="ec:secp384r1"     # Alg for the CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1
+export CA_KEY_ALG="ec:secp384r1"     # Alg for the CA key
 export CA_KEY_ENC="1"                # Set to 0 to not encrypt CA private keys
 
 # Certificate settings
 export CERT_DAYS="365"               # The certificate lifetime in days
 export CERT_EXPIRE_DAYS="14"         # Remaining lifetime in days for autorenew
-export CERT_KEY_ALG="ec:prime256v1"  # Alg for the certificate keys: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1
+export CERT_KEY_ALG="ec:prime256v1"  # Alg for the certificate keys
 export CERT_KEY_ENC="1"              # Set to 0 to not encrypt certificate private keys
 ```
 
-The script also tries to read the `.ca-script.cnf` file in the current folter to get defaults.
+The script also tries to read the `.ca-script.cnf` file in the current folder to get defaults.
 
 ```sh
 # Example .ca-script.cnf that uses defaults
@@ -42,6 +42,12 @@ The script also tries to read the `.ca-script.cnf` file in the current folter to
 [ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
 [ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
 ```
+
+## Supported key algorithms
+
+- rsa:2048, rsa:4096
+- ec:prime256v1, ec:secp384r1
+- ml-dsa-44, ml-dsa-65, ml-dsa-87
 
 ## Root and intermediate certificates
 
