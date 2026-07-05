@@ -40,18 +40,6 @@ CA_KEY_SIZE=${CA_KEY_ALG#*:}
 CERT_KEY_TYPE=${CERT_KEY_ALG%%:*}
 CERT_KEY_SIZE=${CERT_KEY_ALG#*:}
 
-if [ -z "$CA_KEY_TYPE" ] || [ -z "$CA_KEY_SIZE" ]
-then
-    echo "Invalid CA_KEY_ALG environment"
-    exit 1
-fi
-
-if [ -z "$CERT_KEY_TYPE" ] || [ -z "$CERT_KEY_SIZE" ]
-then
-    echo "Invalid CERT_KEY_ALG environment"
-    exit 1
-fi
-
 if [ -d "$CA_PATH" ]
 then
     CA_PATH=$(realpath "$CA_PATH")
