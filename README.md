@@ -14,12 +14,14 @@ export CA_PATH="default-ca"          # CA path
 export CA_DAYS="3650"                # The CA certificate lifetime in days
 export CA_KEY_ALG="ec:secp384r1"     # Alg for the CA key
 export CA_KEY_ENC="1"                # Set to 0 to not encrypt CA private keys
+export CA_MD="sha512"                # Message Digest for CA certificate signature
 
 # Certificate settings
 export CERT_DAYS="365"               # The certificate lifetime in days
 export CERT_EXPIRE_DAYS="14"         # Remaining lifetime in days for autorenew
 export CERT_KEY_ALG="ec:prime256v1"  # Alg for the certificate keys
 export CERT_KEY_ENC="1"              # Set to 0 to not encrypt certificate private keys
+export CERT_MD="sha256"              # Message Digest for certificate signature
 ```
 
 The script also tries to read the `.ca-script.cnf` file in the current folder to get defaults.
@@ -35,12 +37,14 @@ The script also tries to read the `.ca-script.cnf` file in the current folder to
 [ -n "${CA_DAYS+x}" ] || CA_DAYS=3650
 [ -n "${CA_KEY_ALG+x}" ] || CA_KEY_ALG="ec:secp384r1"
 [ -n "${CA_KEY_ENC+x}" ] || CA_KEY_ENC="1"
+[ -n "${CA_MD+x}" ] || CA_MD="sha512"
 
 # Certificate default config
 [ -n "${CERT_DAYS+x}" ] || CERT_DAYS=365
 [ -n "${CERT_EXPIRE_DAYS+x}" ] || CERT_EXPIRE_DAYS=14
 [ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
 [ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
+[ -n "${CERT_MD+x}" ] || CERT_MD="sha256"
 ```
 
 ## Supported key algorithms

@@ -26,12 +26,14 @@ fi
 [ -n "${CA_DAYS+x}" ] || CA_DAYS=3650
 [ -n "${CA_KEY_ALG+x}" ] || CA_KEY_ALG="ec:secp384r1"
 [ -n "${CA_KEY_ENC+x}" ] || CA_KEY_ENC="1"
+[ -n "${CA_MD+x}" ] || CA_MD="sha512"
 
 # Certificate default config
 [ -n "${CERT_DAYS+x}" ] || CERT_DAYS=90
 [ -n "${CERT_EXPIRE_DAYS+x}" ] || CERT_EXPIRE_DAYS=14
 [ -n "${CERT_KEY_ALG+x}" ] || CERT_KEY_ALG="ec:prime256v1"
 [ -n "${CERT_KEY_ENC+x}" ] || CERT_KEY_ENC="1"
+[ -n "${CERT_MD+x}" ] || CERT_MD="sha256"
 
 CA_KEY_TYPE=${CA_KEY_ALG%%:*}
 CA_KEY_SIZE=${CA_KEY_ALG#*:}
@@ -60,10 +62,12 @@ echo "CA_PATH: $CA_PATH"
 echo "CA_DAYS $CA_DAYS"
 echo "CA_KEY_ALG: $CA_KEY_ALG"
 echo "CA_KEY_ENC: $CA_KEY_ENC"
+echo "CA_MD: $CA_MD"
 echo "CERT_DAYS: $CERT_DAYS"
 echo "CERT_EXPIRE_DAYS: $CERT_EXPIRE_DAYS"
 echo "CERT_KEY_ALG: $CERT_KEY_ALG"
 echo "CERT_KEY_ENC: $CERT_KEY_ENC"
+echo "CERT_MD: $CERT_MD"
 echo "--"
 
 ###############################################################################
@@ -123,7 +127,7 @@ crlnumber              = $CA_PATH/ca/crlnumber
 private_key            = $CA_PATH/ca/ca.key
 copy_extensions        = copy
 policy                 = local_ca_policy
-default_md             = sha256
+default_md             = $CERT_MD
 default_crl_days       = 30
 crl_extensions         = crl_ext
 
@@ -135,6 +139,7 @@ organizationName       = optional
 distinguished_name     = req_distinguished_name
 x509_extensions        = root_ca_extensions
 prompt                 = no
+default_md             = $CA_MD
 
 [ req_distinguished_name ]
 O                      = $CA_ORG
@@ -172,7 +177,7 @@ EOL
 
     if [ "$CA_KEY_TYPE" = "rsa" ] || [ "${CA_KEY_TYPE:0:6}" = "ml-dsa" ]
     then
-        if ! openssl req -new -newkey "$CA_KEY_ALG" -sha256 \
+        if ! openssl req -new -newkey "$CA_KEY_ALG" \
                 -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
                 -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
@@ -182,7 +187,7 @@ EOL
     elif [ "$CA_KEY_TYPE" = "ec" ]
     then
         if ! openssl req -new -newkey "$CA_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CA_KEY_SIZE" \
-                -sha256 -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
+                -config "$CA_PATH/ca/ca.cnf" -keyout "$CA_PATH/ca/ca.key" \
                 -out "$CA_PATH/ca/ca.crt" "${OPTS[@]}"
         then
             rm -rf "$CA_PATH"
@@ -306,6 +311,7 @@ cert.create() {
 distinguished_name = req_distinguished_name
 req_extensions     = v3_req
 prompt             = no
+default_md         = $CERT_MD
 
 [req_distinguished_name]
 CN                 = $CN
@@ -331,7 +337,7 @@ EOL
     fi
     if [ "$CERT_KEY_TYPE" = "rsa" ] || [ "${CERT_KEY_TYPE:0:6}" = "ml-dsa" ]
     then
-        if ! openssl req -new -sha256 -newkey "$CERT_KEY_ALG" -config "$CA_PATH/certs/$CN.cnf" \
+        if ! openssl req -new -newkey "$CERT_KEY_ALG" -config "$CA_PATH/certs/$CN.cnf" \
                 -keyout "$CA_PATH/certs/$CN.key" -out "$CA_PATH/certs/$CN.csr" -extensions v3_req \
                 "${OPTS[@]}"
         then
@@ -339,7 +345,7 @@ EOL
         fi
     elif [ "$CERT_KEY_TYPE" = "ec" ]
     then
-        if ! openssl req -new -sha256 -newkey "$CERT_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CERT_KEY_SIZE" \
+        if ! openssl req -new -newkey "$CERT_KEY_TYPE" -pkeyopt "ec_paramgen_curve:$CERT_KEY_SIZE" \
                 -config "$CA_PATH/certs/$CN.cnf" -keyout "$CA_PATH/certs/$CN.key" \
                 -out "$CA_PATH/certs/$CN.csr" -extensions v3_req "${OPTS[@]}"
         then
@@ -518,11 +524,13 @@ print_usage() {
     echo "    CA_DAYS           The CA certificate lifetime in days, default: 3650"
     echo "    CA_KEY_ALG        Alg. for CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1 (default)"
     echo "    CA_KEY_ENC        Encrypt CA private key, default: 1"
+    echo "    CA_MD             Message digest: default: sha512"
     echo ""
     echo "    CERT_DAYS         The certificate lifetime in days, default: 365"
     echo "    CERT_KEY_ALG      Alg. for certificate keys: rsa:2048, rsa:4096, ec:prime256v1 (default), ec:secp384r1"
     echo "    CERT_KEY_ENC      Encrypt certificate private keys, default: 1"
     echo "    CERT_EXPIRE_DAYS  Remaining lifetime in days for autorenew, default 14"
+    echo "    CERT_MD           Message digest: default: sha256"
 }
 
 ###############################################################################
