@@ -1,3 +1,5 @@
 /default-ca
 /default-root-ca
+/signing-ca
+chain.crt
 .ca-script.cnf
