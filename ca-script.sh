@@ -145,7 +145,7 @@ authorityKeyIdentifier = keyid:always
 [ intermediate_ca_ext ]
 subjectKeyIdentifier   = hash
 authorityKeyIdentifier = keyid:always,issuer
-basicConstraints       = critical, CA:true, pathlen:0
+basicConstraints       = critical, CA:true
 keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
 EOL
 
@@ -160,7 +160,7 @@ EOL
 
     if [ "$SELF_SIGNED" -eq 1 ]
     then
-        OPTS+=("-x509" "-days" "$CA_DAYS")
+        OPTS+=("-x509" "-days" "$DAYS")
     fi
 
     if [ "$CA_KEY_TYPE" = "rsa" ] || [ "${CA_KEY_TYPE:0:6}" = "ml-dsa" ]
