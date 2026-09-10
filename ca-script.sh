@@ -146,7 +146,7 @@ authorityKeyIdentifier = keyid:always
 subjectKeyIdentifier   = hash
 authorityKeyIdentifier = keyid:always,issuer
 basicConstraints       = critical, CA:true
-keyUsage               = critical, digitalSignature, cRLSign, keyCertSign
+keyUsage               = critical, keyCertSign, cRLSign
 EOL
 
     local OPTS=()
