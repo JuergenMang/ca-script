@@ -62,30 +62,68 @@ echo "--"
 # Functions
 
 ca.create() {
-    local SELF_SIGNED
-    local DAYS=$CA_DAYS
-    read -r -p "Self signed (Y/n): " SELF_SIGNED
-    if [ -z "$SELF_SIGNED" ] || [ "$SELF_SIGNED" = "y" ] || [ "$SELF_SIGNED" = "Y" ]
+    local SELF_SIGNED=""
+    local DAYS
+    local ORG=""
+    local NAME=""
+
+    local OPTION OPTIND OPTARG
+    while getopts ':hn:o:s:' OPTION
+    do
+        case "$OPTION" in
+            h)
+                echo "ca-script.sh ca create [options...]"
+                echo "Options:"
+                echo "    -s <0|1>           1 = Self signed (default), 0 = Signed by CA defined with CA_ROOT_PATH"
+                echo "    -n <name>          Set the CA name"
+                echo "    -o <organization>  Set the CA organization"
+                return 1
+                ;;
+            n)  NAME="$OPTARG" ;;
+            o)  ORG="$OPTARG" ;;
+            s)
+                if [ "$OPTARG" = "0" ] || [ "$OPTARG" = "n" ]
+                then
+                    SELF_SIGNED="n"
+                elif [ "$OPTARG" = "1" ] || [ "$OPTARG" = "y" ]
+                then
+                    SELF_SIGNED="y"
+                else
+                    echo "Self signed must be 0 or 1"
+                    return 1
+                fi
+                ;;
+            *)
+                echo "Invalid option supplied"
+                return 1
+                ;;
+        esac
+    done
+    shift "$((OPTIND -1))"
+
+    if [ -z "$SELF_SIGNED" ]
+    then
+        read -r -p "Self signed (Y/n): " SELF_SIGNED
+    fi
+    if [ -z "$SELF_SIGNED" ] || [ "${SELF_SIGNED^^}" = "Y" ]
     then
         DAYS=$CA_ROOT_DAYS
         SELF_SIGNED=1
     else
+        DAYS=$CA_DAYS
         SELF_SIGNED=0
     fi
-    local CA_NAME
-    read -r -p "Enter CA Name: " CA_NAME
-    if [ -z "$CA_NAME" ]
-    then
-        echo "No CA Name entered, exiting"
-        exit 1
-    fi
-    local CA_ORG
-    read -r -p "Enter CA Organization: " CA_ORG
-    if [ -z "$CA_ORG" ]
-    then
-        echo "No CA Organization entered, exiting"
-        exit 1
-    fi
+
+    while [ -z "$NAME" ]
+    do
+        read -r -p "Enter CA Name: " NAME
+    done
+
+    while [ -z "$ORG" ]
+    do
+        read -r -p "Enter CA Organization: " ORG
+    done
+
     mkdir -p "$CA_PATH/ca"
     mkdir -p "$CA_PATH/certs"
     mkdir -p "$CA_PATH/certs/archive"
@@ -130,8 +168,8 @@ prompt                 = no
 default_md             = $CA_MD
 
 [ req_distinguished_name ]
-O                      = $CA_ORG
-CN                     = $CA_NAME
+O                      = $ORG
+CN                     = $NAME
 
 [ root_ca_extensions ]
 subjectKeyIdentifier   = hash
@@ -253,46 +291,94 @@ crl.show() {
 }
 
 cert.create() {
-    #first get sans interactively
     local ALT_NAMES
     ALT_NAMES=$(mktemp)
-    #dns names
+    local EXT_KEY_USAGE=""
     local CN=""
+    local N=0
     local I=0
-    while :
+
+    local OPTION OPTIND OPTARG
+    while getopts ':n:hi:u:' OPTION
     do
-        read -r -p "Enter hostname: " NAME
-        [ -z "$NAME" ] && break
-        I=$((I+1))
-        echo "DNS.$I = $NAME" >> "$ALT_NAMES"
-        #first name is CN
-        [ "$I" = "1" ] && CN="$NAME"
+        case "$OPTION" in
+            u)  
+                if [ "$OPTARG" = "clientAuth" ] || [ "$OPTARG" = "serverAuth" ]
+                then
+                    EXT_KEY_USAGE="$OPTARG"
+                else
+                    echo "Invalid key usage, must be: clientAuth or serverAuth"
+                    return 1
+                fi
+                ;;
+            n)
+                N=$((N+1))
+                echo "DNS.$N = $OPTARG" >> "$ALT_NAMES"
+                #first name is CN
+                [ "$N" = "1" ] && CN="$OPTARG"
+                ;;
+            h)
+                echo "ca-script.sh cert create [options...]"
+                echo "Options:"
+                echo "    -u <clientAuth|serverAuth>   Set extended key usage"
+                echo "    -n <dns name>                Set an Alternative DNS Name, can be specified multiple times"
+                echo "    -i <ip address>              Set an Alternative IP Address, can be specified multiple times"
+                return 1
+                ;;
+            i)
+                I=$((I+1))
+                echo "IP.$I = $OPTARG" >> "$ALT_NAMES"
+                ;;
+            *)
+                echo "Invalid option supplied"
+                return 1
+                ;;
+        esac
     done
-    #ips
-    I=0
-    while :
-    do
-        read -r -p "Enter IP: " IP
-        [ -z "$IP" ] && break
-        I=$((I+1))
-        echo "IP.$I = $IP" >> "$ALT_NAMES"
-    done
+    shift "$((OPTIND -1))"
 
     if [ -z "$CN" ]
     then
-        echo "Minimum one name is required"
+        #No sans provided, ask for alt. names and alt. ips
+        #dns names
+        N=0
+        while :
+        do
+            read -r -p "Enter hostname: " NAME
+            [ -z "$NAME" ] && break
+            N=$((A+1))
+            echo "DNS.$N = $NAME" >> "$ALT_NAMES"
+            #first name is CN
+            [ "$N" = "1" ] && CN="$NAME"
+        done
+        #ips
+        I=0
+        while :
+        do
+            read -r -p "Enter IP: " IP
+            [ -z "$IP" ] && break
+            I=$((I+1))
+            echo "IP.$I = $IP" >> "$ALT_NAMES"
+        done
+    fi
+
+    if [ -z "$CN" ]
+    then
+        echo "Minimum one DNS name is required"
         return 1
     fi
 
-    local EXT_KEY_USAGE
-    echo "1) serverAuth"
-    echo "2) clientAuth"
-    read -r -N 1 -p "Extended Key Usage: " EXT_KEY_USAGE
-    case "$EXT_KEY_USAGE" in
-        2) EXT_KEY_USAGE="clientAuth" ;;
-        *) EXT_KEY_USAGE="serverAuth" ;;
-    esac
-    echo ""
+    if [ -z "$EXT_KEY_USAGE" ]
+    then
+        echo "1) serverAuth"
+        echo "2) clientAuth"
+        read -r -N 1 -p "Extended Key Usage: " EXT_KEY_USAGE
+        case "$EXT_KEY_USAGE" in
+            2) EXT_KEY_USAGE="clientAuth" ;;
+            *) EXT_KEY_USAGE="serverAuth" ;;
+        esac
+        echo ""
+    fi
 
     cat > "$CA_PATH/certs/$CN.cnf" << EOL
 [req]
@@ -313,7 +399,7 @@ subjectAltName     = @alt_names
 [alt_names]
 EOL
     cat "$ALT_NAMES" >> "$CA_PATH/certs/$CN.cnf"
-    rm -f "$ALT_NAMES"
+    rm -f -- "$ALT_NAMES"
 
     local OPTS=()
     if [ "$CERT_KEY_ENC" -eq 0 ]
@@ -496,26 +582,30 @@ print_usage() {
     exec 1>&2
     echo "Creates a Self Signed Root CA, Intermediate CA's and creates/signs server and client certificates."
     echo "Usage:"
-    echo "    ca-script.sh ca <create|delete|show|index>"
+    echo "    ca-script.sh ca create [-s <0|1>] [-n <name>] [-o <organization>]"
+    echo "    ca-script.sh ca <delete|show|index>"
     echo "    ca-script.sh ca sign <in csr> <out crt>"
-    echo "    ca-script.sh cert <autorenew|create|list>"
+    echo "    ca-script.sh cert <autorenew|list>"
+    echo "    ca-script.sh cert create [-u <clientAuth|serverAuth>] [-n <dns name>] [-i <ip address>]"
     echo "    ca-script.sh cert <renew|revoke|show> <fqdn>"
     echo "    ca-script.sh cert sign <in csr> <out crt>"
     echo "    ca-script.sh crl <create|show>"
     echo "    ca-script.sh p12 create <fqdn> <output file>"
     echo ""
     echo "Environment:"
-    echo "    CA_ROOT_PATH      Root CA path, default: default-ca"
+    echo "    CA_ROOT_PATH      Root CA path, default: default-root-ca"
     echo "    CA_ROOT_DAYS      The Root CA certificate lifetime in days, default: 7300"
     echo ""
     echo "    CA_PATH           CA path, default: default-ca"
     echo "    CA_DAYS           The CA certificate lifetime in days, default: 3650"
-    echo "    CA_KEY_ALG        Alg. for CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1 (default)"
+    echo "    CA_KEY_ALG        Alg. for CA key: rsa:2048, rsa:4096, ec:prime256v1, ec:secp384r1 (default),"
+    echo "                      ml-dsa-44, ml-dsa-65, ml-dsa-87"
     echo "    CA_KEY_ENC        Encrypt CA private key, default: 1"
     echo "    CA_MD             Message digest: default: sha512"
     echo ""
     echo "    CERT_DAYS         The certificate lifetime in days, default: 365"
-    echo "    CERT_KEY_ALG      Alg. for certificate keys: rsa:2048, rsa:4096, ec:prime256v1 (default), ec:secp384r1"
+    echo "    CERT_KEY_ALG      Alg. for certificate keys: rsa:2048, rsa:4096, ec:prime256v1 (default), ec:secp384r1,"
+    echo "                      ml-dsa-44, ml-dsa-65, ml-dsa-87"
     echo "    CERT_KEY_ENC      Encrypt certificate private keys, default: 1"
     echo "    CERT_EXPIRE_DAYS  Remaining lifetime in days for autorenew, default 14"
     echo "    CERT_MD           Message digest: default: sha256"
@@ -538,16 +628,16 @@ case "$CATEGORY" in
     ca)
         case "$ACTION" in
             create)
-                ca.create
+                ca.create "$@"
                 ;;
             delete)
-                ca.delete
+                ca.delete "$@"
                 ;;
             index)
-                ca.index
+                ca.index "$@"
                 ;;
             show)
-                ca.show
+                ca.show "$@"
                 ;;
             sign)
                 ca.sign "$@"
@@ -561,13 +651,13 @@ case "$CATEGORY" in
     cert)
         case "$ACTION" in
             autorenew)
-                cert.autorenew
+                cert.autorenew "$@"
                 ;;
             create)
-                cert.create
+                cert.create "$@"
                 ;;
             list)
-                cert.list
+                cert.list "$@"
                 ;;
             renew)
                 cert.renew "$@"
@@ -590,10 +680,10 @@ case "$CATEGORY" in
     crl)
         case "$ACTION" in
             create)
-                crl.create
+                crl.create "$@"
                 ;;
             show)
-                crl.show
+                crl.show "$@"
                 ;;
             *)
                 print_usage

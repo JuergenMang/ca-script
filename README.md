@@ -18,7 +18,7 @@ export CA_MD="sha512"                # Message Digest for CA certificate signatu
 
 # Certificate settings
 export CERT_DAYS="365"               # The certificate lifetime in days
-export CERT_EXPIRE_DAYS="14"         # Remaining lifetime in days for autorenew
+export CERT_EXPIRE_DAYS="14"         # Remaining lifetime in days for auto renew
 export CERT_KEY_ALG="ec:prime256v1"  # Alg for the certificate keys
 export CERT_KEY_ENC="1"              # Set to 0 to not encrypt certificate private keys
 export CERT_MD="sha256"              # Message Digest for certificate signature
@@ -53,7 +53,7 @@ The script also tries to read the `.ca-script.cnf` file in the current folder to
 - ec:prime256v1, ec:secp384r1
 - ml-dsa-44, ml-dsa-65, ml-dsa-87
 
-## Root and intermediate certificates
+## Root and intermediate CA certificates
 
 You can create a Root CA certificate and multiple intermediate or signing certificates.
 
@@ -62,21 +62,16 @@ You can create a Root CA certificate and multiple intermediate or signing certif
 The script creates a self signed certificate.
 
 ```sh
-CA_PATH=default-root-ca ./ca-script.sh ca create
+CA_PATH=default-root-ca ./ca-script.sh ca create -s1
 ```
-
-- Select "Self signed: y"
 
 ### To create the default intermediate CA certificate
 
 The script uses the CA defined by `CA_ROOT_PATH` to sign the intermediate certificate.
 
 ```sh
-./ca-script.sh ca create
+./ca-script.sh ca create -s0
 ```
-
-- Select "Self signed: n"
-
 ## Multiple CA's
 
 Simply use a different `CA_PATH` to manage multiple CA's with this script.
@@ -93,7 +88,7 @@ export P12_PASS="<password>"
 
 ## Usage
 
-### Create a CA
+### Manage a CA
 
 ```sh
 # Create the CA with default values.
@@ -105,9 +100,14 @@ export P12_PASS="<password>"
 
 # Show the CA index
 ./ca-script.sh ca index
+
+# Sign a CSR for an intermediate CA
+./ca-script.sh ca sign <in csr> <out crt>
 ```
 
-You can find the CA certificate in the folder `$CA_PATH/ca/ca.crt` and import this files in the CA trust stores to trust issued certificates.
+You can find the CA certificate in the folder `$CA_PATH/ca/ca.crt`.
+
+Import the root CA certificate in your CA trust stores to trust issued certificates.
 
 ### Managing Certificates
 
@@ -129,6 +129,9 @@ You can find the certificate and private key in the folder `$CA_PATH/certs/<fqdn
 
 # Renew all certificates that expire within two weeks
 ./ca-script.sh cert autorenew
+
+# Sign an CSR
+./ca-script.sh cert sign <in csr> <out crt>
 ```
 
 #### Post Renew Hook
